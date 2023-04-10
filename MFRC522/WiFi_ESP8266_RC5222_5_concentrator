@@ -1,0 +1,108 @@
+// Import Libraries
+#include <ESP8266WiFi.h>  // WeMos D1R1 ESP8266 WiFi library 
+#include <SPI.h>  // SPI library for communicating with the MFRC522 reader
+#include <MFRC522.h>  // MFRC522 library for reading RFID cards
+
+// Wi-Fi credentials
+const char* ssid = "your_SSID";
+const char* password = "your_PASSWORD";
+WiFiServer server(80);
+
+// Define the SS (Slave Select) and RST (Reset) pins for each reader
+#define SS_PIN_1 D0
+#define RST_PIN_1 D1
+#define SS_PIN_2 D2
+#define RST_PIN_2 D3
+#define SS_PIN_3 D4
+#define RST_PIN_3 D5
+#define SS_PIN_4 D6
+#define RST_PIN_4 D7
+#define SS_PIN_5 D8
+#define RST_PIN_5 D9
+
+// Create an array of MFRC522 objects (one for each reader)
+MFRC522 rfid[5] = {
+  MFRC522(SS_PIN_1, RST_PIN_1),
+  MFRC522(SS_PIN_2, RST_PIN_2),
+  MFRC522(SS_PIN_3, RST_PIN_3),
+  MFRC522(SS_PIN_4, RST_PIN_4),
+  MFRC522(SS_PIN_5, RST_PIN_5)
+};
+
+// Create a MIFARE_Key object for the authentication key
+MFRC522::MIFARE_Key key;
+
+// Create an array to store the new UID for each reader
+byte nuidPICC[5][7];
+
+// Create an array of reader IDs (A for reader 1, B for reader 2, etc.)
+byte readerIDs[5] = {'A', 'B', 'C', 'D', 'E'};
+
+void setup() { 
+  // Initialize serial communication with the computer
+  Serial.begin(115200, SERIAL_8N1);
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start the server
+  server.begin();
+
+  // Initialize the SPI bus
+  SPI.begin();
+
+  for (byte i = 0; i < 5; i++) {
+    rfid[i].PCD_Init();
+    rfid[i].PCD_SetAntennaGain(rfid[i].RxGain_max);
+  }
+
+  // Set the authentication key to 0xFF for all 6 key bytes
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+}
+
+void loop() {
+  WiFiClient client = server.available();
+
+  if (client) {
+    for (byte reader = 0; reader < 5; reader++) {
+      if (rfid[reader].PICC_IsNewCardPresent() && rfid[reader].PICC_ReadCardSerial()) {
+        for (byte i = 0; i < rfid[reader].uid.size; i++) {
+          nuidPICC[reader][i] = rfid[reader].uid.uidByte[i];
+        }
+
+        byte checksum = nuidPICC[reader][0];
+        for (byte i = 1; i < 5; i++) { // Only use the first 5 UID bytes for checksum calculation
+          checksum = checksum ^ nuidPICC[reader][i];
+        }
+
+        client.write(readerIDs[reader]);
+
+        for (byte i = 0; i < 5; i++) { // Only send the first 5 UID bytes
+          client.print(nuidPICC[reader][i] < 0x10 ? "0" : "");
+          client.print(nuidPICC[reader][i], HEX);
+        }
+
+        client.print(checksum < 0x10 ? "0" : "");
+        client.print(checksum, HEX);
+
+        client.write(0x0D); // CR
+        client.write(0x0A); // LF
+        client.write('>'); // ETX replaced by '>'
+
+        rfid[reader].PICC_HaltA();
+        rfid[reader].PCD_StopCrypto1();
+      }
+    }
+  }
+}
