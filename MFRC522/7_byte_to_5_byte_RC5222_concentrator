@@ -1,0 +1,99 @@
+// Import Libraries
+#include <SPI.h>  // SPI library for communicating with the MFRC522 reader
+#include <MFRC522.h>  // MFRC522 library for reading RFID cards
+
+// Define the SS (Slave Select) and RST (Reset) pins for each reader
+#define SS_PIN_1 10  // Slave Select pin for reader 1
+#define RST_PIN_1 9  // Reset pin for reader 1
+
+#define SS_PIN_2 8  // Slave Select pin for reader 2
+#define RST_PIN_2 7  // Reset pin for reader 2
+
+#define SS_PIN_3 6  // Slave Select pin for reader 3
+#define RST_PIN_3 5  // Reset pin for reader 3
+
+#define SS_PIN_4 4  // Slave Select pin for reader 4
+#define RST_PIN_4 3  // Reset pin for reader 4
+
+#define SS_PIN_5 2  // Slave Select pin for reader 5
+#define RST_PIN_5 A0  // Reset pin for reader 5
+
+#define SS_PIN_6 A1  // Slave Select pin for reader 6
+#define RST_PIN_6 A2  // Reset pin for reader 6
+
+#define SS_PIN_7 A3  // Slave Select pin for reader 7
+#define RST_PIN_7 A4  // Reset pin for reader 7
+
+#define SS_PIN_8 A5  // Slave Select pin for reader 8
+#define RST_PIN_8 A6  // Reset pin for reader 8
+
+// Create an array of MFRC522 objects (one for each reader)
+MFRC522 rfid[8] = {
+  MFRC522(SS_PIN_1, RST_PIN_1),  // Instance of the class for reader 1
+  MFRC522(SS_PIN_2, RST_PIN_2),  // Instance of the class for reader 2
+  MFRC522(SS_PIN_3, RST_PIN_3),  // Instance of the class for reader 3
+  MFRC522(SS_PIN_4, RST_PIN_4),  // Instance of the class for reader 4
+  MFRC522(SS_PIN_5, RST_PIN_5),  // Instance of the class for reader 5
+  MFRC522(SS_PIN_6, RST_PIN_6),  // Instance of the class for reader 6
+  MFRC522(SS_PIN_7, RST_PIN_7),  // Instance of the class for reader 7
+  MFRC522(SS_PIN_8, RST_PIN_8)   // Instance of the class for reader 8
+};
+
+// Create a MIFARE_Key object for the authentication key
+MFRC522::MIFARE_Key key;
+
+// Create an array to store the new UID for each reader
+byte nuidPICC[8][7];
+
+// Create an array of reader IDs (A for reader 1, B for reader 2, etc.)
+byte readerIDs[8] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
+
+void setup() { 
+  // Initialize serial communication with the computer
+  Serial.begin(9600, SERIAL_8N1);
+
+  // Initialize the SPI bus
+  SPI.begin();
+
+for (byte i = 0; i < 8; i++) {
+  rfid[i].PCD_Init();
+  rfid[i].PCD_SetAntennaGain(rfid[i].RxGain_max);
+}
+
+  // Set the authentication key to 0xFF for all 6 key bytes
+  for (byte i = 0; i < 6; i++) {
+    key.keyByte[i] = 0xFF;
+  }
+}
+
+void loop() {
+  for (byte reader = 0; reader < 8; reader++) {
+    if (rfid[reader].PICC_IsNewCardPresent() && rfid[reader].PICC_ReadCardSerial()) {
+      for (byte i = 0; i < rfid[reader].uid.size; i++) {
+        nuidPICC[reader][i] = rfid[reader].uid.uidByte[i];
+      }
+
+      byte checksum = nuidPICC[reader][0];
+      for (byte i = 1; i < 5; i++) { // Only use the first 5 UID bytes for checksum calculation
+        checksum = checksum ^ nuidPICC[reader][i];
+      }
+
+      Serial.write(readerIDs[reader]);
+
+      for (byte i = 0; i < 5; i++) { // Only send the first 5 UID bytes
+        Serial.print(nuidPICC[reader][i] < 0x10 ? "0" : "");
+        Serial.print(nuidPICC[reader][i], HEX);
+      }
+
+      Serial.print(checksum < 0x10 ? "0" : "");
+      Serial.print(checksum, HEX);
+
+      Serial.write(0x0D); // CR
+      Serial.write(0x0A); // LF
+      Serial.write('>'); // ETX replaced by '>'
+
+      rfid[reader].PICC_HaltA();
+      rfid[reader].PCD_StopCrypto1();
+    }
+  }
+}
