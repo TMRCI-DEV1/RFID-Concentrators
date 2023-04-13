@@ -86,6 +86,12 @@ void loop() {
       Serial.write(0x0D); // CR
       Serial.write(0x0A); // LF
       Serial.write('>'); // '>' character
+
+      // Add a delay and wait for the tag to be removed
+      delay(100);
+      while (rfid[reader].tagPresent()) {
+        delay(50); // Small delay to avoid reading too fast
+      }
     }
   }
 }
