@@ -1,45 +1,53 @@
-#include <SPI.h>
-#include <PN532_SPI.h>
-#include <PN532.h>
-#include <NfcAdapter.h>
+#include <SPI.h> // SPI library for communicating with the PN532 reader
+#include <Adafruit_PN532.h> // Adafruit PN532 library for reading RFID cards
 
 // Define the SS (Slave Select) pins for each reader
-#define SCK_PIN 52
-#define MISO_PIN 50
-#define MOSI_PIN 51
+#define SS_PIN_1 10 // Slave Select pin for reader 1
+#define SS_PIN_2 8 // Slave Select pin for reader 2
+#define SS_PIN_3 6 // Slave Select pin for reader 3
+#define SS_PIN_4 4 // Slave Select pin for reader 4
+#define SS_PIN_5 53 // Slave Select pin for reader 5
+#define SS_PIN_6 A0 // Slave Select pin for reader 6
+#define SS_PIN_7 A1 // Slave Select pin for reader 7
+#define SS_PIN_8 A2 // Slave Select pin for reader 8
 
-#define SS_PIN_1 10
-#define SS_PIN_2 8
-#define SS_PIN_3 6
-#define SS_PIN_4 4
-#define SS_PIN_5 2
-#define SS_PIN_6 A14
-#define SS_PIN_7 A12
-#define SS_PIN_8 A10
+// Create an array of Adafruit_PN532 objects (one for each reader)
+Adafruit_PN532 rfid[] = {
+  Adafruit_PN532(SS_PIN_1, &SPI),
+  Adafruit_PN532(SS_PIN_2, &SPI),
+  Adafruit_PN532(SS_PIN_3, &SPI),
+  Adafruit_PN532(SS_PIN_4, &SPI),
+  Adafruit_PN532(SS_PIN_5, &SPI),
+  Adafruit_PN532(SS_PIN_6, &SPI),
+  Adafruit_PN532(SS_PIN_7, &SPI),
+  Adafruit_PN532(SS_PIN_8, &SPI)
+};
+#include <SPI.h> // SPI library for communicating with the PN532 reader
+#include <Adafruit_PN532.h> // Adafruit PN532 library for reading RFID cards
 
-// Create PN532_SPI objects
-PN532_SPI interface1(SPI, SS_PIN_1);
-PN532_SPI interface2(SPI, SS_PIN_2);
-PN532_SPI interface3(SPI, SS_PIN_3);
-PN532_SPI interface4(SPI, SS_PIN_4);
-PN532_SPI interface5(SPI, SS_PIN_5);
-PN532_SPI interface6(SPI, SS_PIN_6);
-PN532_SPI interface7(SPI, SS_PIN_7);
-PN532_SPI interface8(SPI, SS_PIN_8);
+// Define the SS (Slave Select) pins for each reader
+#define SS_PIN_1 10 // Slave Select pin for reader 1
+#define SS_PIN_2 8 // Slave Select pin for reader 2
+#define SS_PIN_3 6 // Slave Select pin for reader 3
+#define SS_PIN_4 4 // Slave Select pin for reader 4
+#define SS_PIN_5 53 // Slave Select pin for reader 5
+#define SS_PIN_6 A0 // Slave Select pin for reader 6
+#define SS_PIN_7 A1 // Slave Select pin for reader 7
+#define SS_PIN_8 A2 // Slave Select pin for reader 8
 
-// Create an array of NfcAdapter objects (one for each reader)
-NfcAdapter rfid[] = {
-  NfcAdapter(interface1),
-  NfcAdapter(interface2),
-  NfcAdapter(interface3),
-  NfcAdapter(interface4),
-  NfcAdapter(interface5),
-  NfcAdapter(interface6),
-  NfcAdapter(interface7),
-  NfcAdapter(interface8)
+// Create an array of Adafruit_PN532 objects (one for each reader)
+Adafruit_PN532 rfid[] = {
+  Adafruit_PN532(SS_PIN_1, &SPI),
+  Adafruit_PN532(SS_PIN_2, &SPI),
+  Adafruit_PN532(SS_PIN_3, &SPI),
+  Adafruit_PN532(SS_PIN_4, &SPI),
+  Adafruit_PN532(SS_PIN_5, &SPI),
+  Adafruit_PN532(SS_PIN_6, &SPI),
+  Adafruit_PN532(SS_PIN_7, &SPI),
+  Adafruit_PN532(SS_PIN_8, &SPI)
 };
 
-const int numReaders = sizeof(rfid) / sizeof(NfcAdapter);
+const int numReaders = sizeof(rfid) / sizeof(Adafruit_PN532);
 
 // Create an array to store the new UID for each reader
 byte nuidPICC[8][7];
@@ -48,26 +56,29 @@ byte nuidPICC[8][7];
 const byte readerIDs[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
 
 void setup() {
-  Serial.begin(9600);
+  // Initialize serial communication with the computer
+  Serial.begin(9600, SERIAL_8N1);
+
+  // Initialize the SPI bus
   SPI.begin();
 
   for (uint8_t i = 0; i < numReaders; i++) {
     rfid[i].begin();
+    rfid[i].SAMConfig();
   }
 }
 
 void loop() {
   for (uint8_t reader = 0; reader < numReaders; reader++) {
-    if (rfid[reader].tagPresent()) {
-      NfcTag tag = rfid[reader].read();
-      tag.print();
-      String tagId = tag.getUidString();
-      byte uid[7];
-      byte uidLength = tag.getUidLength();
-      tag.getUid(uid, uidLength);
+    uint8_t success;
+    uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
+    uint8_t uidLength;
+    
+    success = rfid[reader].readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50); // Non-blocking with 50ms timeout
 
-      memcpy(nuidPICC[reader], uid, uidLength);
-
+    if (success) {
+      memcpy(nuidPICC[reader], uid, 7);
+      
       byte checksum = nuidPICC[reader][0];
       for (byte i = 1; i < 5; i++) { // Only use the first 5 UID bytes for checksum calculation
         checksum ^= nuidPICC[reader][i];
@@ -85,13 +96,60 @@ void loop() {
 
       Serial.write(0x0D); // CR
       Serial.write(0x0A); // LF
-      Serial.write('>'); // '>' character
+      Serial.write('>'); // ETX replaced by '>'
+    }
+  }
+}
+const int numReaders = sizeof(rfid) / sizeof(Adafruit_PN532);
 
-      // Add a delay and wait for the tag to be removed
-      delay(100);
-      while (rfid[reader].tagPresent()) {
-        delay(50); // Small delay to avoid reading too fast
+// Create an array to store the new UID for each reader
+byte nuidPICC[8][7];
+
+// Create an array of reader IDs (A for reader 1, B for reader 2, etc.)
+const byte readerIDs[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
+
+void setup() {
+  // Initialize serial communication with the computer
+  Serial.begin(9600, SERIAL_8N1);
+
+  // Initialize the SPI bus
+  SPI.begin();
+
+  for (uint8_t i = 0; i < numReaders; i++) {
+    rfid[i].begin();
+    rfid[i].SAMConfig();
+  }
+}
+
+void loop() {
+  for (uint8_t reader = 0; reader < numReaders; reader++) {
+    uint8_t success;
+    uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
+    uint8_t uidLength;
+    
+    success = rfid[reader].readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50); // Non-blocking with 50ms timeout
+
+    if (success) {
+      memcpy(nuidPICC[reader], uid, 7);
+      
+      byte checksum = nuidPICC[reader][0];
+      for (byte i = 1; i < 5; i++) { // Only use the first 5 UID bytes for checksum calculation
+        checksum ^= nuidPICC[reader][i];
       }
+
+      Serial.write(readerIDs[reader]);
+
+      for (byte i = 0; i < 5; i++) { // Only send the first 5 UID bytes
+        Serial.print(nuidPICC[reader][i] < 0x10 ? "0" : "");
+        Serial.print(nuidPICC[reader][i], HEX);
+      }
+
+      Serial.print(checksum < 0x10 ? "0" : "");
+      Serial.print(checksum, HEX);
+
+      Serial.write(0x0D); // CR
+      Serial.write(0x0A); // LF
+      Serial.write('>'); // ETX replaced by '>'
     }
   }
 }
