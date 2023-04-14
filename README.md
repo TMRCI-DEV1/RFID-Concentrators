@@ -1,5 +1,5 @@
 # RFID-Concentrators
-Arduino sketches for RFID hardware combinations using the MERG Concentrator JMRI connection type
+Arduino sketches (with or without an Ethernet Shield) for RFID hardware combinations using the MERG Concentrator JMRI connection type. Ethernet Shield enabled sketches are suffixed with "_ETH".
 
 Shield: [![CC BY-SA 4.0][cc-by-sa-shield]][cc-by-sa]
 
