@@ -9,23 +9,23 @@ const IPAddress ip(192, 168, 51, 200);      // Change as desired
 EthernetServer server(8888); // TCP server object listening on port 8888 Change as desired
 
 // Define the SS (Slave Select) and RST (Reset) pins for each reader
-#define SS_PIN_1 10  // Slave Select pin for reader 1
-#define RST_PIN_1 9  // Reset pin for reader 1
+#define SS_PIN_1 A3  // Slave Select pin for reader 1
+#define RST_PIN_1 A4  // Reset pin for reader 1
 
-#define SS_PIN_2 8  // Slave Select pin for reader 2
-#define RST_PIN_2 7  // Reset pin for reader 2
+#define SS_PIN_2 A5  // Slave Select pin for reader 2
+#define RST_PIN_2 2  // Reset pin for reader 2
 
-#define SS_PIN_3 6  // Slave Select pin for reader 3
+#define SS_PIN_3 3  // Slave Select pin for reader 3
 #define RST_PIN_3 5  // Reset pin for reader 3
 
-#define SS_PIN_4 4  // Slave Select pin for reader 4
-#define RST_PIN_4 3  // Reset pin for reader 4
+#define SS_PIN_4 6  // Slave Select pin for reader 4
+#define RST_PIN_4 7  // Reset pin for reader 4
 
-#define SS_PIN_5 2  // Slave Select pin for reader 5
-#define RST_PIN_5 A0  // Reset pin for reader 5
+#define SS_PIN_5 8  // Slave Select pin for reader 5
+#define RST_PIN_5 9  // Reset pin for reader 5
 
-#define SS_PIN_6 A1  // Slave Select pin for reader 6
-#define RST_PIN_6 A2  // Reset pin for reader 6
+#define SS_PIN_6 A0  // Slave Select pin for reader 6
+#define RST_PIN_6 A1  // Reset pin for reader 6
 
 // Create an array of MFRC522 objects (one for each reader)
 MFRC522 rfid[6] = {
