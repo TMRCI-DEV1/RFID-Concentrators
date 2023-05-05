@@ -1,0 +1,140 @@
+// Import Libraries
+#include <SPI.h>  // SPI library for communicating with the MFRC522 reader
+#include <MFRC522.h>  // MFRC522 library for reading RFID cards
+
+#if defined(ESP32)
+  #include <WiFi.h>
+#elif defined(ESP8266)
+  #include <ESP8266WiFi.h>
+#else
+  #error "Please select an ESP32 or ESP8266 board."
+#endif
+
+// Wi-Fi credentials
+const char* ssid = "your_SSID";
+const char* password = "your_PASSWORD";
+WiFiServer server(8888);
+
+// Define the SS (Slave Select) and RST (Reset) pins for each reader
+#if defined(ESP32)
+  const uint8_t ssPins[] = {4, 5, 16, 17};      // Assign pins based on board used and preference
+  const uint8_t rstPins[] = {18, 19, 21, 22};
+#elif defined(ESP8266)
+  const uint8_t ssPins[] = {D0, D1, D2, D8};
+  const uint8_t rstPins[] = {D6, D7, D3, D4};
+#endif
+
+const uint8_t readerAssignment[] = {1, 2, 3, 4}; // Assign reader numbers based on SS and RST pins
+
+const int numReaders = sizeof(ssPins) / sizeof(ssPins[0]);
+const char readerID[] = {'A', 'B', 'C', 'D'};
+
+struct RFIDReader {
+  char id;
+  uint8_t ssPin;
+  uint8_t rstPin;
+  MFRC522 mfrc522;
+  byte nuid[7];
+  bool isConnected;
+
+  RFIDReader() : id(0), ssPin(0), rstPin(0), mfrc522(MFRC522(0, 0)), isConnected(false) {}
+};
+
+RFIDReader readers[numReaders];
+WiFiClient client;
+
+void setup() {
+  Serial.begin(115200);
+  SPI.begin();
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    // Serial.print(".");  // Remove this line to disable debugging messages
+  }
+
+  // Serial.println("");  // Remove this line to disable debugging messages
+  // Serial.print("Connected to ");  // Remove this line to disable debugging messages
+  // Serial.println(ssid);  // Remove this line to disable debugging messages
+  // Serial.print("IP address: ");  // Remove this line to disable debugging messages
+  // Serial.println(WiFi.localIP());  // Remove this line to disable debugging messages
+  server.begin();
+
+  for (uint8_t i = 0; i < numReaders; i++) {
+    readers[i].ssPin = ssPins[i];
+    readers[i].rstPin = rstPins[i];
+    readers[i].id = readerID[readerAssignment[i] - 1];
+    readers[i].mfrc522 = MFRC522(readers[i].ssPin, readers[i].rstPin);
+    readers[i].mfrc522.PCD_Init();
+    readers[i].mfrc522.PCD_SetAntennaGain(readers[i].mfrc522.RxGain_max);
+  }
+}
+
+void loop() {
+  if (!client.connected()) {
+    WiFiClient newClient = server.available();
+
+    if (newClient) {
+      client = newClient;
+      Serial.println("New client connected");
+    }
+  } else {
+    for (uint8_t i = 0; i < numReaders; i++) {
+      if (readers[i].mfrc522.PICC_IsNewCardPresent() && readers[i].mfrc522.PICC_ReadCardSerial()) {
+        for (uint8_t j = 0; j < readers[i].mfrc522.uid.size; j++) {
+          readers[i].nuid[j] = readers[i].mfrc522.uid.uidByte[j];
+        }
+
+        byte checksum = readers[i].nuid[0];
+        for (uint8_t j = 1; j < 5; j++) {
+          checksum ^= readers[i].nuid[j];
+        }
+
+        // Send output to Serial connection
+        Serial.write(readers[i].id);
+
+        // Send output to WiFi client, if connected
+        if (client.connected()) {
+          client.write(readers[i].id);
+        }
+
+        for (uint8_t j = 0; j < 5; j++) {
+          // Send output to Serial connection
+          Serial.print(readers[i].nuid[j] < 0x10 ? "0" : "");
+          Serial.print(readers[i].nuid[j], HEX);
+
+          // Send output to WiFi client, if connected
+          if (client.connected()) {
+            client.print(readers[i].nuid[j] < 0x10 ? "0" : "");
+            client.print(readers[i].nuid[j], HEX);
+          }
+        }
+
+        // Send output to Serial connection
+        Serial.print(checksum < 0x10 ? "0" : "");
+        Serial.print(checksum, HEX);
+
+        // Send output to WiFi client, if connected
+        if (client.connected()) {
+          client.print(checksum < 0x10 ? "0" : "");
+          client.print(checksum, HEX);
+        }
+
+        // Send output to Serial connection
+        Serial.write(0x0D);
+        Serial.write(0x0A);
+        Serial.write('>');
+
+        // Send output to WiFi client, if connected
+        if (client.connected()) {
+          client.write(0x0D); // CR
+          client.write(0x0A); // LF
+          client.write('>');  // ETX replaced by '>'
+        }
+
+        readers[i].mfrc522.PICC_HaltA();
+        readers[i].mfrc522.PCD_StopCrypto1();
+      }
+    }
+  }
+}
