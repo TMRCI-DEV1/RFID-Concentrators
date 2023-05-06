@@ -24,7 +24,7 @@ struct RFIDReader {
 const uint8_t ssPins[] = {9, 8, 7, 6, 5, A0};
 const char readerID[] = {'A', 'B', 'C', 'D', 'E', 'F'};
 #elif defined(ARDUINO_AVR_MEGA2560)
-const uint8_t ssPins[] = {53, 52, 51, 50, 49, 48, 47, 46};
+const uint8_t ssPins[] = {45, 44, 43, 42, 41, 40, 39, 38};
 const char readerID[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
 #endif
 
