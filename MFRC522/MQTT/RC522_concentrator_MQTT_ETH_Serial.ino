@@ -192,12 +192,12 @@ void sendOutputToSerialAndEthernet(RFIDReader &reader) {
     ethClient.print(checksum, HEX);
   }
 
-  // Send line endings to Serial connection
+  // Output line endings and a '>' symbol (MERG Concentrator format)
   Serial.write(0x0D); // CR
   Serial.write(0x0A); // LF
   Serial.write('>');  // ETX replaced by '>'
 
-  // Send line endings to Ethernet client, if connected
+  // Output line endings and a '>' symbol (MERG Concentrator format)
   if (isEthernetConnected && ethClient.connected()) {
     ethClient.write(0x0D); // CR
     ethClient.write(0x0A); // LF
