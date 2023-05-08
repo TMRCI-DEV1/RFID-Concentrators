@@ -1,35 +1,35 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.1
+  Version: 1.0.2
   Date: 2023-05-08
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
 
 // Include Libraries
-#include <SPI.h>               // SPI communication library
-#include <Adafruit_PN532.h>    // PN532 NFC/RFID library
-#include <string.h>            // String manipulation library
-#include <Ethernet.h>          // Ethernet communication library
-#include <PubSubClient.h>      // MQTT library
+#include <SPI.h>             // SPI communication library
+#include <Adafruit_PN532.h>  // PN532 NFC/RFID library
+#include <string.h>          // String manipulation library
+#include <Ethernet.h>        // Ethernet communication library
+#include <PubSubClient.h>    // MQTT library
 
 // MQTT base topics - Change to match your JMRI MQTT topics for Reporters and Sensors
 const String REPORTER_BASE_TOPIC = "TMRCI/dt/reporter/RFID/";
 const String SENSOR_BASE_TOPIC = "TMRCI/dt/sensor/RFID_sensor/";
 
 // Ethernet configuration
-byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED}; // MAC address for the Ethernet shield
-IPAddress ip(192, 168, 1, 177); // Static IP address for the device
-unsigned int serverPort = 8888; // Port number for the Ethernet server
-EthernetServer server(serverPort); // Initialize the Ethernet server
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // MAC address for the Ethernet shield
+IPAddress ip(192, 168, 1, 177);                       // Static IP address for the device
+unsigned int serverPort = 8888;                       // Port number for the Ethernet server
+EthernetServer server(serverPort);                    // Initialize the Ethernet server
 
 // MQTT configuration
-IPAddress mqttServer(192, 168, 1, 200); // IP address of the MQTT broker
-const int mqttPort = 1883; // Port number for the MQTT broker
+IPAddress mqttServer(192, 168, 1, 200);  // IP address of the MQTT broker
+const int mqttPort = 1883;               // Port number for the MQTT broker
 
-EthernetClient ethClient; // Create an Ethernet client
-PubSubClient mqttClient(ethClient); // Create an MQTT client using the Ethernet client
+EthernetClient ethClient;            // Create an Ethernet client
+PubSubClient mqttClient(ethClient);  // Create an MQTT client using the Ethernet client
 
 // RFIDReader struct for managing RFID readers
 struct RFIDReader {
@@ -39,17 +39,18 @@ struct RFIDReader {
   byte nuid[7];
   bool cardRead;
 
-  RFIDReader() : id(0), ssPin(0), pn532(Adafruit_PN532(0, &SPI)), cardRead(false) {}
+  RFIDReader()
+    : id(0), ssPin(0), pn532(Adafruit_PN532(0, &SPI)), cardRead(false) {}
 };
 
 // Configure RFID reader pins and IDs for Arduino Uno or Nano
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_NANO)
-const uint8_t ssPins[] = {9, 8, 7, 6, 5, A0};
-const char readerID[] = {'A', 'B', 'C', 'D', 'E', 'F'};
+const uint8_t ssPins[] = { 9, 8, 7, 6, 5, A0 };
+const char readerID[] = { 'A', 'B', 'C', 'D', 'E', 'F' };
 // Configure RFID reader pins and IDs for Arduino Mega 2560
 #elif defined(ARDUINO_AVR_MEGA2560)
-const uint8_t ssPins[] = {45, 44, 43, 42, 41, 40, 39, 38};
-const char readerID[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
+const uint8_t ssPins[] = { 45, 44, 43, 42, 41, 40, 39, 38 };
+const char readerID[] = { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H' };
 #endif
 
 // Calculate the number of RFID readers
@@ -69,10 +70,10 @@ void setup() {
   pinMode(10, OUTPUT);
   digitalWrite(10, HIGH);
 
-  // Set pin 53 as OUTPUT for the Arduino Mega 2560
-  #if defined(ARDUINO_AVR_MEGA2560)
-    pinMode(53, OUTPUT);
-  #endif
+// Set pin 53 as OUTPUT for the Arduino Mega 2560
+#if defined(ARDUINO_AVR_MEGA2560)
+  pinMode(53, OUTPUT);
+#endif
 
   // Configure pin 4 for the SD card on the Ethernet shield
   pinMode(4, OUTPUT);
@@ -106,7 +107,7 @@ void setup() {
       readers[i].pn532.SAMConfig();
       // Print information about the detected reader
     } else {
-      readers[i].ssPin = 0; // Mark as not detected
+      readers[i].ssPin = 0;  // Mark as not detected
     }
   }
 
@@ -146,7 +147,7 @@ void mqtt_reconnect() {
     // Update the timestamp of the last reconnect attempt
     lastReconnectAttempt = now;
 
-    // Try to connect to the MQTT broker with the client ID "ArduinoMega"
+    // Try to connect to the MQTT broker with the client ID "Arduino"
     if (mqttClient.connect("Arduino")) {
       // Connection successful (uncomment the line below for debugging)
       // Serial.println("MQTT connected");
@@ -175,7 +176,7 @@ void loop() {
       continue;
     }
 
-    uint8_t uid[] = {0, 0, 0, 0, 0, 0, 0};
+    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
     uint8_t uidLength;
     // Read the card UID from the RFID reader
     uint8_t success = readers[i].pn532.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
@@ -223,14 +224,14 @@ void loop() {
       }
 
       // Output line endings and a '>' symbol (MERG Concentrator format)
-      Serial.write(0x0D); // CR
-      Serial.write(0x0A); // LF
-      Serial.write('>');  // ETX replaced by '>'
+      Serial.write(0x0D);  // CR
+      Serial.write(0x0A);  // LF
+      Serial.write('>');   // ETX replaced by '>'
 
       if (client) {
-        client.write(0x0D); // CR
-        client.write(0x0A); // LF
-        client.write('>');  // ETX replaced by '>'
+        client.write(0x0D);  // CR
+        client.write(0x0A);  // LF
+        client.write('>');   // ETX replaced by '>'
       }
 
       // If Ethernet is connected
@@ -252,24 +253,28 @@ void loop() {
         tagData += String(checksum, HEX);
         mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
 
-            // Publish an "ACTIVE" status to the MQTT sensor topic
-    String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-    mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
-  }
-
-    // Add a delay to avoid multiple reads
-    delay(500);
-    } else {
-    // If the card is not present or removed
-    if (readers[i].cardRead) {
-      if (isEthernetConnected) {
-        // Publish an "INACTIVE" status to the MQTT sensor topic
+        // Publish an "ACTIVE" status to the MQTT sensor topic
         String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-        mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
+        mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
       }
-    }
-    // Mark the card as not read
-    readers[i].cardRead = false;
+
+      // Add a delay to avoid multiple reads
+      delay(500);
+    } else {
+      // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
+      if (readers[i].cardRead) {
+        if (isEthernetConnected) {
+          // Publish an "INACTIVE" status to the MQTT sensor topic
+          String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
+          mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
+
+          // Publish a "no payload" message to the MQTT reporter topic
+          String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+          mqttClient.publish(reporterTopic.c_str(), "");
+        }
+      }
+      // Mark the card as not read
+      readers[i].cardRead = false;
     }
   }
 }
