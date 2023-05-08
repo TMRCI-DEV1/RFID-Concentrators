@@ -1,7 +1,7 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.2
+  Version: 1.0.3
   Date: 2023-05-08
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
@@ -288,12 +288,14 @@ void loop() {
       readers[i].mfrc522.PICC_HaltA();
       readers[i].mfrc522.PCD_StopCrypto1();
     } else {
-      // If a tag is no longer detected, set the sensor to INACTIVE
+      // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
       if (readers[i].tagPresent) {
         String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
+        String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
         if (isEthernetConnected) {
           mqttClient.connect("RFID_reader");
           mqttClient.publish(topicSensor.c_str(), "INACTIVE");
+          mqttClient.publish(topicReporter.c_str(), ""); // Clear the reporter by sending an empty payload
           mqttClient.disconnect();
         }
         readers[i].tagPresent = false;
