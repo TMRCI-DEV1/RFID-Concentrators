@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.2
-  Date: 2023-05-08
+  Version: 1.0.4
+  Date: 2023-05-10
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -162,11 +162,13 @@ void mqtt_reconnect() {
 
 // Main loop function
 void loop() {
+  
   EthernetClient client;
 
   // Check if Ethernet is connected
   if (isEthernetConnected) {
     client = server.available();
+    mqttClient.loop();
   }
 
   // Loop through all RFID readers
@@ -183,7 +185,6 @@ void loop() {
 
     // If a card is successfully read
     if (success) {
-
       // Copy the UID to the reader's nuid array
       memcpy(readers[i].nuid, uid, 7);
       readers[i].cardRead = true;
@@ -198,30 +199,17 @@ void loop() {
       // (the following sections handle both Serial and Ethernet client output)
 
       // Output the reader ID
-      Serial.write(readers[i].id);
-      if (client) {
-        client.write(readers[i].id);
-      }
+      Serial.print(readers[i].id);
 
       // Output the UID
       for (byte j = 0; j < 5; j++) {
         Serial.print(readers[i].nuid[j] < 0x10 ? "0" : "");
         Serial.print(readers[i].nuid[j], HEX);
-
-        if (client) {
-          client.print(readers[i].nuid[j] < 0x10 ? "0" : "");
-          client.print(readers[i].nuid[j], HEX);
-        }
       }
 
       // Output the UID checksum
       Serial.print(checksum < 0x10 ? "0" : "");
       Serial.print(checksum, HEX);
-
-      if (client) {
-        client.print(checksum < 0x10 ? "0" : "");
-        client.print(checksum, HEX);
-      }
 
       // Output line endings and a '>' symbol (MERG Concentrator format)
       Serial.write(0x0D);  // CR
@@ -229,6 +217,16 @@ void loop() {
       Serial.write('>');   // ETX replaced by '>'
 
       if (client) {
+        client.write(readers[i].id);
+        
+        for (byte j = 0; j < 5; j++) {
+          client.print(readers[i].nuid[j] < 0x10 ? "0" : "");
+          client.print(readers[i].nuid[j], HEX);
+        }
+
+        client.print(checksum < 0x10 ? "0" : "");
+        client.print(checksum, HEX);
+
         client.write(0x0D);  // CR
         client.write(0x0A);  // LF
         client.write('>');   // ETX replaced by '>'
@@ -240,41 +238,40 @@ void loop() {
         if (!mqttClient.connected()) {
           mqtt_reconnect();
         }
-        mqttClient.loop();
+        
+      // Publish the UID data to the MQTT reporter topic
+      String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+      String tagData = "";
+      for (byte j = 0; j < 5; j++) {
+        tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
+        tagData += String(readers[i].nuid[j], HEX);
+      }
+      tagData += String(checksum < 0x10 ? "0" : "");
+      tagData += String(checksum, HEX);
+      mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
 
-        // Publish the UID data to the MQTT reporter topic
-        String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
-        String tagData = "";
-        for (byte j = 0; j < 5; j++) {
-          tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
-          tagData += String(readers[i].nuid[j], HEX);
-        }
-        tagData += String(checksum < 0x10 ? "0" : "");
-        tagData += String(checksum, HEX);
-        mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
+      // Publish an "ACTIVE" status to the MQTT sensor topic
+      String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
+      mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
+    }
 
-        // Publish an "ACTIVE" status to the MQTT sensor topic
+    // Add a delay to avoid multiple reads
+    delay(500);
+  } else {
+    // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
+    if (readers[i].cardRead) {
+      if (isEthernetConnected) {
+        // Publish an "INACTIVE" status to the MQTT sensor topic
         String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-        mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
-      }
+        mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
 
-      // Add a delay to avoid multiple reads
-      delay(500);
-    } else {
-      // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
-      if (readers[i].cardRead) {
-        if (isEthernetConnected) {
-          // Publish an "INACTIVE" status to the MQTT sensor topic
-          String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-          mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
-
-          // Publish a "no payload" message to the MQTT reporter topic
-          String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
-          mqttClient.publish(reporterTopic.c_str(), "");
-        }
+        // Publish a "no payload" message to the MQTT reporter topic
+        String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+        mqttClient.publish(reporterTopic.c_str(), "");
       }
-      // Mark the card as not read
-      readers[i].cardRead = false;
+    }
+    // Mark the card as not read
+    readers[i].cardRead = false;
     }
   }
 }
