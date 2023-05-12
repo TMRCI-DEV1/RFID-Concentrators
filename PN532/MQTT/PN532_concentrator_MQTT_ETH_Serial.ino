@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.4
-  Date: 2023-05-10
+  Version: 1.0.5
+  Date: 2023-05-12
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -38,6 +38,7 @@ struct RFIDReader {
   Adafruit_PN532 pn532;
   byte nuid[7];
   bool cardRead;
+  unsigned long lastReadTime;
 
   RFIDReader()
     : id(0), ssPin(0), pn532(Adafruit_PN532(0, &SPI)), cardRead(false) {}
@@ -177,6 +178,11 @@ void loop() {
     if (readers[i].ssPin == 0) {
       continue;
     }
+    
+    // Check if enough time has passed since the last read
+    if (millis() - readers[i].lastReadTime < 500) {
+      continue;
+    }
 
     uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
     uint8_t uidLength;
@@ -188,6 +194,9 @@ void loop() {
       // Copy the UID to the reader's nuid array
       memcpy(readers[i].nuid, uid, 7);
       readers[i].cardRead = true;
+      
+      // Update the last read time
+      readers[i].lastReadTime = millis();
 
       // Calculate the UID checksum
       byte checksum = readers[i].nuid[0];
@@ -255,8 +264,6 @@ void loop() {
       mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
     }
 
-    // Add a delay to avoid multiple reads
-    delay(500);
   } else {
     // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
     if (readers[i].cardRead) {
