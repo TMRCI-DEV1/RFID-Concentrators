@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.3
-  Date: 2023-05-08
+  Version: 1.0.4
+  Date: 2023-05-12
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -135,6 +135,8 @@ void setup() {
 }
 
 // MQTT reconnect function - attempts to reconnect to the MQTT broker
+unsigned long lastAttemptTime = 0;
+
 void reconnect() {
   // Continue trying to reconnect until connected
   while (!mqttClient.connected()) {
@@ -144,11 +146,17 @@ void reconnect() {
       // Connection was successful (commented out)
       // Serial.println("connected");
     } else {
-      // Connection failed, wait 5 seconds before retrying (commented out)
+      // Connection failed, check if 5 seconds have passed before retrying (commented out)
       // Serial.print("failed, rc=");
       // Serial.print(mqttClient.state());
       // Serial.println(" try again in 5 seconds");
-      delay(5000);
+      unsigned long currentMillis = millis();
+      if (currentMillis - lastAttemptTime > 5000) {
+        lastAttemptTime = currentMillis;
+      } else {
+        // If 5 seconds haven't passed yet, return and do other tasks
+        return;
+      }
     }
   }
 }
