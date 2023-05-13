@@ -127,9 +127,9 @@ void setup() {
   for (int i = 0; i < numReaders; i++) {
     if (readers[i].isConnected) {
       digitalWrite(LED_BUILTIN, HIGH);
-      delay(300);
+      delay(200);
       digitalWrite(LED_BUILTIN, LOW);
-      delay(300);
+      delay(200);
     }
   }
 }
