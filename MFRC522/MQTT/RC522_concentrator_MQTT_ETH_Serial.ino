@@ -1,7 +1,7 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.4
+  Version: 1.0.5
   Date: 2023-05-12
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
@@ -26,8 +26,8 @@ const char* mqttReporterTopicBase = "TMRCI/dt/reporter/RFID/";    // Replace wit
 
 // Define SS and RST pins, and reader assignments based on Arduino board type
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_NANO)
-const uint8_t ssPins[] = {5, 6, 7, A0, A1, A2};
-const uint8_t rstPins[] = {4, 8, 9, A3, A4, A5};
+const uint8_t ssPins[] = {2, 3, 5, 6, 7, A0};
+const uint8_t rstPins[] = {8, 9, 11, 12, A1, A2};
 const uint8_t readerAssignment[] = {1, 2, 3, 4, 5, 6}; // Assign reader numbers based on SS and RST pins
 #elif defined(ARDUINO_AVR_MEGA2560)
 const uint8_t ssPins[] = {5, 6, 7, 8, 9, A0, A1, A2};
