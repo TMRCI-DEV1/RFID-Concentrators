@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.4
-  Date: 2023-05-12
+  Version: 1.0.5
+  Date: 2023-05-14
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -213,30 +213,18 @@ void sendOutputToSerialAndEthernet(RFIDReader &reader) {
   }
 }
 
-// Function to get the RFID data (NUID and checksum) as a string
+// Function to get the RFID data (NUID) as a string
 String getRFIDData(RFIDReader &reader) {
   String rfidData = "";
   
   // Add NUID to the RFID data string
-  for (uint8_t j = 0; j < 5; j++) {
+  for (uint8_t j = 0; j < 5; j++) { // Loop for 5-byte UID
     if (reader.nuid[j] < 0x10) {
       rfidData += "0";
     }
     rfidData += String(reader.nuid[j], HEX);
   }
   
-  // Calculate the checksum from the reader's NUID
-  byte checksum = reader.nuid[0];
-  for (uint8_t j = 1; j < 5; j++) {
-    checksum ^= reader.nuid[j];
-  }
-  
-  // Add checksum to the RFID data string
-  if (checksum < 0x10) {
-    rfidData += "0";
-  }
-  rfidData += String(checksum, HEX);
-
   // Return the formatted RFID data string
   return rfidData;
 }
@@ -249,6 +237,10 @@ void loop() {
 
   // If Ethernet is connected, handle MQTT and TCP clients
   if (isEthernetConnected) {
+    // Reconnect to MQTT broker if not connected
+    if (!mqttClient.connected()) {
+      reconnect();
+    }
     mqttClient.loop(); // Keep MQTT client connected and process incoming messages
 
     // Handle incoming TCP connections
@@ -261,6 +253,16 @@ void loop() {
         }
       }
       client.stop(); // Stop client connection
+    }
+  } else {
+    // Try to reconnect to the Ethernet network
+    if (Ethernet.begin(mac) == 1) {
+      isEthernetConnected = true;
+      delay(1000);
+      // Set the MQTT server again
+      mqttClient.setServer(mqttServer, serverPort);
+      // Restart the server
+      server.begin();
     }
   }
 
