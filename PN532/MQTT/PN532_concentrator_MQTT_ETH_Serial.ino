@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.5
-  Date: 2023-05-12
+  Version: 1.0.6
+  Date: 2023-05-14
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -249,15 +249,13 @@ void loop() {
         }
         
       // Publish the UID data to the MQTT reporter topic
-      String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
-      String tagData = "";
-      for (byte j = 0; j < 5; j++) {
-        tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
-        tagData += String(readers[i].nuid[j], HEX);
-      }
-      tagData += String(checksum < 0x10 ? "0" : "");
-      tagData += String(checksum, HEX);
-      mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
+        String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+        String tagData = "";
+        for (byte j = 0; j < 5; j++) {  // Only include the 5-byte tag data, exclude the checksum
+          tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
+          tagData += String(readers[i].nuid[j], HEX);
+        }
+        mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
 
       // Publish an "ACTIVE" status to the MQTT sensor topic
       String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
