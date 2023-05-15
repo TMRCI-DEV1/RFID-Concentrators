@@ -1,7 +1,7 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.6
+  Version: 1.0.7
   Date: 2023-05-15
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
@@ -267,49 +267,46 @@ void loop() {
     }
   }
 
-  // Loop through each RFID reader
+  // Check for new cards and read card UIDs
   for (uint8_t i = 0; i < numReaders; i++) {
-    // Check if a new card is detected and read its UID
     if (readers[i].mfrc522.PICC_IsNewCardPresent() && readers[i].mfrc522.PICC_ReadCardSerial()) {
-      // Copy UID bytes to the reader's NUID
+      readers[i].tagPresent = true;
+  
+      // Update the 'nuid' field with the card's UID
       for (uint8_t j = 0; j < readers[i].mfrc522.uid.size; j++) {
         readers[i].nuid[j] = readers[i].mfrc522.uid.uidByte[j];
       }
 
-      // If the tag is not already present, process it
-      if (!readers[i].tagPresent) {
-        // Get RFID data and construct MQTT topics
-        String rfidData = getRFIDData(readers[i]);
-        String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
-        String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
+      // Get RFID data and construct MQTT topics
+      String rfidData = getRFIDData(readers[i]);
+      String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
+      String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
 
-        // Send data via MQTT if Ethernet is connected, otherwise use Serial and Ethernet connections
-        if (isEthernetConnected) {
-          mqttClient.connect("RFID_reader");
-          mqttClient.publish(topicSensor.c_str(), "ACTIVE");
-          mqttClient.publish(topicReporter.c_str(), rfidData.c_str());
-          mqttClient.disconnect();
-        } else {
-          sendOutputToSerialAndEthernet(readers[i]);
-        }
-        readers[i].tagPresent = true;
+      // Always send output to Serial and Ethernet connections
+      sendOutputToSerialAndEthernet(readers[i]);
+
+      // Send data via MQTT if Ethernet is connected
+      if (isEthernetConnected) {
+        mqttClient.connect("RFID_reader");
+        mqttClient.publish(topicSensor.c_str(), "ACTIVE");
+        mqttClient.publish(topicReporter.c_str(), rfidData.c_str());
+        mqttClient.disconnect();
       }
 
       // Halt card processing and stop encryption
       readers[i].mfrc522.PICC_HaltA();
       readers[i].mfrc522.PCD_StopCrypto1();
     } else {
+      readers[i].tagPresent = false;
+
       // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
-      if (readers[i].tagPresent) {
-        String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
-        String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
-        if (isEthernetConnected) {
-          mqttClient.connect("RFID_reader");
-          mqttClient.publish(topicSensor.c_str(), "INACTIVE");
-          mqttClient.publish(topicReporter.c_str(), ""); // Clear the reporter by sending an empty payload
-          mqttClient.disconnect();
-        }
-        readers[i].tagPresent = false;
+      String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
+      String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
+      if (isEthernetConnected) {
+        mqttClient.connect("RFID_reader");
+        mqttClient.publish(topicSensor.c_str(), "INACTIVE");
+        mqttClient.publish(topicReporter.c_str(), ""); // Clear the reporter by sending an empty payload
+        mqttClient.disconnect();
       }
     }
   }
