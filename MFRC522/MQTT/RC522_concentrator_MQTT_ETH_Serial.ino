@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.5
-  Date: 2023-05-14
+  Version: 1.0.6
+  Date: 2023-05-15
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial and Ethernet clients.
 */
@@ -58,8 +58,9 @@ struct RFIDReader {
 // Create an array of RFIDReader structs
 RFIDReader readers[numReaders];
 
-// Declare EthernetClient and PubSubClient objects
-EthernetClient ethClient;
+// Ethernet client objects
+EthernetClient ethClient; // MQTT client
+EthernetClient client;    // Ethernet client
 PubSubClient mqttClient(ethClient);
 
 // Declare a variable to track the Ethernet connection status
@@ -96,7 +97,7 @@ void setup() {
   // If Ethernet is connected, start the server and set the MQTT server
   if (isEthernetConnected) {
     server.begin();
-    mqttClient.setServer(mqttServer, serverPort);
+    mqttClient.setServer(mqttServer, 1883); // Replace 1883 with your MQTT broker's port if different
   }
 
   // Initialize RFID readers
@@ -243,16 +244,16 @@ void loop() {
     }
     mqttClient.loop(); // Keep MQTT client connected and process incoming messages
 
-    // Handle incoming TCP connections
-    EthernetClient client = server.available();
+    // If there's no Ethernet client connected, try to accept a new one
+    if (!client || !client.connected()) {
+      client = server.available();
+    }
+
     if (client) {
-      while (client.connected()) {
-        if (client.available()) {
-          char c = client.read();
-          // Process incoming Ethernet data
-        }
+      while (client.available()) {
+        char c = client.read();
+        // Process incoming Ethernet data
       }
-      client.stop(); // Stop client connection
     }
   } else {
     // Try to reconnect to the Ethernet network
