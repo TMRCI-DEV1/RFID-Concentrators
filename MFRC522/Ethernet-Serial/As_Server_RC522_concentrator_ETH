@@ -1,11 +1,20 @@
-// Import Libraries
+/*
+  Project: Arduino-based MFRC522 RFID Concentrator
+  Author: Thomas Seitz (thomas.seitz@tmrci.org)
+  Version: 1.0.5
+  Date: 2023-05-16
+  Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers 
+  and outputs data to Ethernet and Serial clients.
+*/
+
+// Include required libraries
 #include <SPI.h>           // SPI library for communicating with the MFRC522 reader
 #include <MFRC522.h>       // MFRC522 library for reading RFID cards
 #include <Ethernet.h>      // Ethernet library for the Ethernet shield
 
 // Ethernet configuration
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-IPAddress ip(192, 168, 1, 177); // Replace with the desired IP address
+IPAddress ip(192, 168, 1, 177);  // Replace with the desired IP address
 unsigned int serverPort = 8888;  // Replace with the desired port number
 EthernetServer server(serverPort);
 
