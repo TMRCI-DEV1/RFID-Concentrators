@@ -1,8 +1,17 @@
-// Include Libraries
-#include <SPI.h>
-#include <Adafruit_PN532.h>
-#include <string.h>
-#include <Ethernet.h>
+/*
+  Project: Arduino-based PN532 RFID Concentrator
+  Author: Thomas Seitz (thomas.seitz@tmrci.org)
+  Version: 1.0.5
+  Date: 2023-05-16
+  Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers 
+  and outputs data to Ethernet and Serial clients.
+*/
+
+// Include required libraries
+#include <SPI.h>            // SPI library for communicating with the PN532 reader
+#include <Adafruit_PN532.h> // PN532 library for reading RFID cards
+#include <string.h>         // C headers library
+#include <Ethernet.h>       // Ethernet library for the Ethernet shield
 
 // Ethernet configuration
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
