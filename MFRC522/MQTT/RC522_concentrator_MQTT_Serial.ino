@@ -2,9 +2,9 @@
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
   Version: 1.0.7
-  Date: 2023-05-15
+  Date: 2023-05-16
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
-  and outputs data to Serial and Ethernet clients.
+  and outputs data to Serial clients. Uses DHCP for obtaining Arduino's IP address.
 */
 
 // Include required libraries
@@ -13,13 +13,8 @@
 #include <Ethernet.h>      // Ethernet library for the Ethernet shield
 #include <PubSubClient.h>  // PubSub Client library for the MQTT connection  
 
-// Define MAC address, IP address, and server port for Ethernet shield
+// Define MAC address, IP address, and MQTT server
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-IPAddress ip(192, 168, 1, 177); // Replace with the desired IP address
-unsigned int serverPort = 8888; // Replace with the desired port number
-EthernetServer server(serverPort);
-
-// Define MQTT server IP address and MQTT topics
 IPAddress mqttServer(192, 168, 1, 200);
 const char* mqttSensorTopicBase = "TMRCI/dt/sensor/RFID_sensor/"; // Replace with the the appropriate JMRI Sensor topic
 const char* mqttReporterTopicBase = "TMRCI/dt/reporter/RFID/";    // Replace with the appropriate JMRI Reporter topic
@@ -72,6 +67,13 @@ void setup() {
   Serial.begin(9600);
   SPI.begin();
 
+  // Start Ethernet connection with the given MAC address
+  Ethernet.begin(mac);
+  delay(1000);
+
+  // Set the MQTT server
+  mqttClient.setServer(mqttServer, 1883); // Replace 1883 with your MQTT broker's port if different
+
   // Configure pin 10 for the Ethernet shield
   pinMode(10, OUTPUT);
   digitalWrite(10, HIGH);
@@ -96,7 +98,6 @@ void setup() {
 
   // If Ethernet is connected, start the server and set the MQTT server
   if (isEthernetConnected) {
-    server.begin();
     mqttClient.setServer(mqttServer, 1883); // Replace 1883 with your MQTT broker's port if different
   }
 
@@ -162,8 +163,8 @@ void reconnect() {
   }
 }
 
-// Function to send output to both Serial and Ethernet connections
-void sendOutputToSerialAndEthernet(RFIDReader &reader) {
+// Function to send output to Serial only
+void sendOutputToSerial(RFIDReader &reader) {
   // Calculate the checksum from the reader's NUID
   byte checksum = reader.nuid[0];
   for (uint8_t j = 1; j < 5; j++) {
@@ -183,40 +184,21 @@ void sendOutputToSerialAndEthernet(RFIDReader &reader) {
     // Send NUID to Serial connection
     Serial.print(reader.nuid[j] < 0x10 ? "0" : "");
     Serial.print(reader.nuid[j], HEX);
-
-    // Send NUID to Ethernet client, if connected
-    if (isEthernetConnected && ethClient.connected()) {
-      ethClient.print(reader.nuid[j] < 0x10 ? "0" : "");
-      ethClient.print(reader.nuid[j], HEX);
-    }
   }
 
   // Send checksum to Serial connection
   Serial.print(checksum < 0x10 ? "0" : "");
   Serial.print(checksum, HEX);
 
-  // Send checksum to Ethernet client, if connected
-  if (isEthernetConnected && ethClient.connected()) {
-    ethClient.print(checksum < 0x10 ? "0" : "");
-    ethClient.print(checksum, HEX);
-  }
-
   // Output line endings and a '>' symbol (MERG Concentrator format)
   Serial.write(0x0D); // CR
   Serial.write(0x0A); // LF
   Serial.write('>');  // ETX replaced by '>'
-
-  // Output line endings and a '>' symbol (MERG Concentrator format)
-  if (isEthernetConnected && ethClient.connected()) {
-    ethClient.write(0x0D); // CR
-    ethClient.write(0x0A); // LF
-    ethClient.write('>');  // ETX replaced by '>'
-  }
 }
 
 // Function to get the RFID data (NUID) as a string
 String getRFIDData(RFIDReader &reader) {
-  String rfidData = "";
+  String rfidData = ""; // Declare the rfidData here
   
   // Add NUID to the RFID data string
   for (uint8_t j = 0; j < 5; j++) { // Loop for 5-byte UID
@@ -233,39 +215,12 @@ String getRFIDData(RFIDReader &reader) {
 void loop() {
   // Maintain Ethernet connection
   Ethernet.maintain();
-  // Check if the Ethernet link is connected
-  isEthernetConnected = Ethernet.linkStatus() == LinkON;
 
-  // If Ethernet is connected, handle MQTT and TCP clients
-  if (isEthernetConnected) {
-    // Reconnect to MQTT broker if not connected
-    if (!mqttClient.connected()) {
-      reconnect();
-    }
-    mqttClient.loop(); // Keep MQTT client connected and process incoming messages
-
-    // If there's no Ethernet client connected, try to accept a new one
-    if (!client || !client.connected()) {
-      client = server.available();
-    }
-
-    if (client) {
-      while (client.available()) {
-        char c = client.read();
-        // Process incoming Ethernet data
-      }
-    }
-  } else {
-    // Try to reconnect to the Ethernet network
-    if (Ethernet.begin(mac) == 1) {
-      isEthernetConnected = true;
-      delay(1000);
-      // Set the MQTT server again
-      mqttClient.setServer(mqttServer, serverPort);
-      // Restart the server
-      server.begin();
-    }
+  // Reconnect to MQTT broker if not connected
+  if (!mqttClient.connected()) {
+    reconnect();
   }
+  mqttClient.loop(); // Keep MQTT client connected and process incoming messages
 
   // Check for new cards and read card UIDs
   for (uint8_t i = 0; i < numReaders; i++) {
@@ -283,7 +238,7 @@ void loop() {
       String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
 
       // Always send output to Serial and Ethernet connections
-      sendOutputToSerialAndEthernet(readers[i]);
+      sendOutputToSerial(readers[i]);
 
       // Send data via MQTT if Ethernet is connected
       if (isEthernetConnected) {
