@@ -1,10 +1,10 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.6
-  Date: 2023-05-14
+  Version: 1.0.7
+  Date: 2023-05-16
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
-  and outputs data to Serial and Ethernet clients.
+  and outputs data to Serial clients. Uses DHCP for obtaining Arduino's IP address.
 */
 
 // Include Libraries
@@ -19,10 +19,7 @@ const String REPORTER_BASE_TOPIC = "TMRCI/dt/reporter/RFID/";
 const String SENSOR_BASE_TOPIC = "TMRCI/dt/sensor/RFID_sensor/";
 
 // Ethernet configuration
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };  // MAC address for the Ethernet shield
-IPAddress ip(192, 168, 1, 177);                       // Static IP address for the device
-unsigned int serverPort = 8888;                       // Port number for the Ethernet server
-EthernetServer server(serverPort);                    // Initialize the Ethernet server
+byte mac[] = { 0x90, 0xA2, 0xDA, 0x85, 0xE1, 0x7E };  // MAC address for the Ethernet shield
 
 // MQTT configuration
 IPAddress mqttServer(192, 168, 1, 200);  // IP address of the MQTT broker
@@ -67,14 +64,14 @@ void setup() {
   Serial.begin(9600);
   SPI.begin();
 
-  // Configure pin 10 for the Ethernet shield
+    // Configure pin 10 for the Ethernet shield
   pinMode(10, OUTPUT);
   digitalWrite(10, HIGH);
 
-// Set pin 53 as OUTPUT for the Arduino Mega 2560
-#if defined(ARDUINO_AVR_MEGA2560)
-  pinMode(53, OUTPUT);
-#endif
+  // Set pin 53 as OUTPUT for the Arduino Mega 2560
+  #if defined(ARDUINO_AVR_MEGA2560)
+    pinMode(53, OUTPUT);
+  #endif
 
   // Configure pin 4 for the SD card on the Ethernet shield
   pinMode(4, OUTPUT);
@@ -91,7 +88,6 @@ void setup() {
 
   // If Ethernet is connected, start the server and set the MQTT server
   if (isEthernetConnected) {
-    server.begin();
     mqttClient.setServer(mqttServer, mqttPort);
   }
 
@@ -163,12 +159,9 @@ void mqtt_reconnect() {
 
 // Main loop function
 void loop() {
-  
-  EthernetClient client;
 
   // Check if Ethernet is connected
   if (isEthernetConnected) {
-    client = server.available();
     mqttClient.loop();
   }
 
@@ -224,22 +217,6 @@ void loop() {
       Serial.write(0x0D);  // CR
       Serial.write(0x0A);  // LF
       Serial.write('>');   // ETX replaced by '>'
-
-      if (client) {
-        client.write(readers[i].id);
-        
-        for (byte j = 0; j < 5; j++) {
-          client.print(readers[i].nuid[j] < 0x10 ? "0" : "");
-          client.print(readers[i].nuid[j], HEX);
-        }
-
-        client.print(checksum < 0x10 ? "0" : "");
-        client.print(checksum, HEX);
-
-        client.write(0x0D);  // CR
-        client.write(0x0A);  // LF
-        client.write('>');   // ETX replaced by '>'
-      }
 
       // If Ethernet is connected
       if (isEthernetConnected) {
