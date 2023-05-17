@@ -1,22 +1,32 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.5
-  Date: 2023-05-16
+  Version: 1.0.6
+  Date: 2023-05-17
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers 
   and outputs data to Ethernet and Serial clients.
 */
 
+// Define whether to use Ethernet or not
+// #define USE_ETHERNET
+
 // Include required libraries
 #include <SPI.h>           // SPI library for communicating with the MFRC522 reader
 #include <MFRC522.h>       // MFRC522 library for reading RFID cards
-#include <Ethernet.h>      // Ethernet library for the Ethernet shield
 
+#ifdef USE_ETHERNET
+#include <Ethernet.h>      // Ethernet library for the Ethernet shield
+#endif
+
+#ifdef USE_ETHERNET
 // Ethernet configuration
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
 IPAddress ip(192, 168, 1, 177);  // Replace with the desired IP address
 unsigned int serverPort = 8888;  // Replace with the desired port number
 EthernetServer server(serverPort);
+EthernetClient client;
+bool isEthernetConnected = false;
+#endif
 
 // Define the SS (Slave Select) and RST (Reset) pins for each reader
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_NANO)
@@ -44,8 +54,6 @@ struct RFIDReader {
 };
 
 RFIDReader readers[numReaders];
-EthernetClient client;
-bool isEthernetConnected = false;
 
 void setup() {
   Serial.begin(9600);
@@ -61,14 +69,15 @@ void setup() {
   pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
 
+  #ifdef USE_ETHERNET
   Ethernet.begin(mac, ip);
 
   if (Ethernet.hardwareStatus() == EthernetNoHardware || Ethernet.linkStatus() == LinkOFF) {
-    // Serial.println("Ethernet shield not connected or network not available");
     isEthernetConnected = false;
   } else {
     isEthernetConnected = true;
   }
+  #endif
 
   for (uint8_t i = 0; i < numReaders; i++) {
     readers[i].ssPin = ssPins[i];
@@ -81,43 +90,38 @@ void setup() {
     // Check if the reader is connected
     if (readers[i].mfrc522.PCD_PerformSelfTest()) {
       readers[i].isConnected = true;
-
-      // Print debugging information
-      // Serial.print("Reader ");
-      // Serial.print(readers[i].id);
-      // Serial.print(" detected on SS pin ");
-      // Serial.println(readers[i].ssPin);
     } else {
       readers[i].isConnected = false;
     }
   }
 
+  #ifdef USE_ETHERNET
   if (isEthernetConnected) {
     server.begin();
   }
+  #endif
 
   // Blink the LED to indicate the number of detected readers
   pinMode(LED_BUILTIN, OUTPUT);
   for (int i = 0; i < numReaders; i++) {
     if (readers[i].isConnected) {
       digitalWrite(LED_BUILTIN, HIGH);
-      delay(300);
+      delay(200);
       digitalWrite(LED_BUILTIN, LOW);
-      delay(300);
+      delay(200);
     }
   }
 }
 
 void loop() {
+  #ifdef USE_ETHERNET
   if (isEthernetConnected) {
     if (!client.connected()) {
       client.stop();
       client = server.accept();
-      /*if (client) {
-        Serial.println("Client connected");
-      }*/
     }
   }
+  #endif
 
   for (uint8_t i = 0; i < numReaders; i++) {
     if (readers[i].isConnected && readers[i].mfrc522.PICC_IsNewCardPresent() && readers[i].mfrc522.PICC_ReadCardSerial()) {
@@ -133,46 +137,44 @@ void loop() {
       // Send output to Serial connection
       Serial.write(readers[i].id);
 
+      #ifdef USE_ETHERNET
       // Send output to Ethernet client, if connected
       if (isEthernetConnected && client.connected()) {
         client.write(readers[i].id);
       }
+      #endif
 
       for (uint8_t j = 0; j < 5; j++) {
         // Send output to Serial connection
         Serial.print(readers[i].nuid[j] < 0x10 ? "0" : "");
         Serial.print(readers[i].nuid[j], HEX);
 
+        #ifdef USE_ETHERNET
         // Send output to Ethernet client, if connected
         if (isEthernetConnected && client.connected()) {
           client.print(readers[i].nuid[j] < 0x10 ? "0" : "");
           client.print(readers[i].nuid[j], HEX);
         }
+        #endif
       }
 
       // Send output to Serial connection
-      Serial.print(checksum < 0x10 ? "0" : "");
-      Serial.print(checksum, HEX);
+      Serial.write(0x0D); // CR
+      Serial.write(0x0A); // LF
+      Serial.write('>');  // ETX replaced by '>'
 
-      // Send output to Ethernet client, if connected
-      if (isEthernetConnected && client.connected()) {
-        client.print(checksum < 0x10 ? "0" : "");
-        client.print(checksum, HEX);
-      }
-
-      // Send output to Serial connection
-      Serial.write(0x0D);
-      Serial.write(0x0A);
-      Serial.write('>');
-
+      #ifdef USE_ETHERNET
       // Send output to Ethernet client, if connected
       if (isEthernetConnected && client.connected()) {
         client.write(0x0D); // CR
         client.write(0x0A); // LF
         client.write('>');  // ETX replaced by '>'
       }
+      #endif
 
+      // Halt PICC
       readers[i].mfrc522.PICC_HaltA();
+      // Stop encryption on PCD
       readers[i].mfrc522.PCD_StopCrypto1();
     }
   }
