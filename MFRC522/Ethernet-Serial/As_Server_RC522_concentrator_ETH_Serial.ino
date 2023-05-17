@@ -158,6 +158,18 @@ void loop() {
         #endif
       }
 
+      // Print checksum
+      Serial.print(checksum < 0x10 ? "0" : "");
+      Serial.print(checksum, HEX);
+
+      #ifdef USE_ETHERNET
+      // Send checksum to Ethernet client, if connected
+      if (isEthernetConnected && client.connected()) {
+        client.print(checksum < 0x10 ? "0" : "");
+        client.print(checksum, HEX);
+      }
+      #endif
+
       // Send output to Serial connection
       Serial.write(0x0D); // CR
       Serial.write(0x0A); // LF
