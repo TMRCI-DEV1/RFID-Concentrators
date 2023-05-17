@@ -1,8 +1,8 @@
 /*
   Project: Arduino-based PN532 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.7
-  Date: 2023-05-16
+  Version: 1.0.8
+  Date: 2023-05-17
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial clients. Uses DHCP for obtaining Arduino's IP address.
 */
@@ -14,6 +14,8 @@
 #include <Ethernet.h>        // Ethernet communication library
 #include <PubSubClient.h>    // MQTT library
 
+// #define USE_MQTT  // Uncomment this line to use MQTT. Comment it to use Serial only.
+
 // MQTT base topics - Change to match your JMRI MQTT topics for Reporters and Sensors
 const String REPORTER_BASE_TOPIC = "TMRCI/dt/reporter/RFID/";
 const String SENSOR_BASE_TOPIC = "TMRCI/dt/sensor/RFID_sensor/";
@@ -22,7 +24,7 @@ const String SENSOR_BASE_TOPIC = "TMRCI/dt/sensor/RFID_sensor/";
 byte mac[] = { 0x90, 0xA2, 0xDA, 0x85, 0xE1, 0x7E };  // MAC address for the Ethernet shield
 
 // MQTT configuration
-IPAddress mqttServer(192, 168, 1, 200);  // IP address of the MQTT broker
+IPAddress mqttServer(192, 168, 1, 11);   // IP address of the MQTT broker
 const int mqttPort = 1883;               // Port number for the MQTT broker
 
 EthernetClient ethClient;            // Create an Ethernet client
@@ -64,7 +66,7 @@ void setup() {
   Serial.begin(9600);
   SPI.begin();
 
-    // Configure pin 10 for the Ethernet shield
+  // Configure pin 10 for the Ethernet shield
   pinMode(10, OUTPUT);
   digitalWrite(10, HIGH);
 
@@ -77,19 +79,21 @@ void setup() {
   pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
 
-  // Start Ethernet connection with the given MAC address
-  if (Ethernet.begin(mac) == 1) {
-    isEthernetConnected = true;
-    delay(1000);
-  } else {
-    // Ethernet shield not connected or network not available
-    isEthernetConnected = false;
-  }
+  #ifdef USE_MQTT
+    // Start Ethernet connection with the given MAC address
+    if (Ethernet.begin(mac) == 1) {
+      isEthernetConnected = true;
+      delay(1000);
+    } else {
+      // Ethernet shield not connected or network not available
+      isEthernetConnected = false;
+    }
 
-  // If Ethernet is connected, start the server and set the MQTT server
-  if (isEthernetConnected) {
-    mqttClient.setServer(mqttServer, mqttPort);
-  }
+    // If Ethernet is connected, start the server and set the MQTT server
+    if (isEthernetConnected) {
+      mqttClient.setServer(mqttServer, mqttPort);
+    }
+  #endif
 
   // Initialize RFID readers
   for (uint8_t i = 0; i < numReaders; i++) {
@@ -159,11 +163,12 @@ void mqtt_reconnect() {
 
 // Main loop function
 void loop() {
-
-  // Check if Ethernet is connected
-  if (isEthernetConnected) {
-    mqttClient.loop();
-  }
+  #ifdef USE_MQTT
+    // Check if Ethernet is connected
+    if (isEthernetConnected) {
+      mqttClient.loop();
+    }
+  #endif
 
   // Loop through all RFID readers
   for (uint8_t i = 0; i < numReaders; i++) {
@@ -218,42 +223,72 @@ void loop() {
       Serial.write(0x0A);  // LF
       Serial.write('>');   // ETX replaced by '>'
 
-      // If Ethernet is connected
-      if (isEthernetConnected) {
-        // Reconnect to the MQTT broker if necessary
-        if (!mqttClient.connected()) {
-          mqtt_reconnect();
-        }
+      #ifdef USE_MQTT
+        // If Ethernet is connected
+        if (isEthernetConnected) {
+          // Reconnect to the MQTT broker if necessary
+          if (!mqttClient.connected()) {
+            mqtt_reconnect();
+          }
         
-      // Publish the UID data to the MQTT reporter topic
-        String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
-        String tagData = "";
-        for (byte j = 0; j < 5; j++) {  // Only include the 5-byte tag data, exclude the checksum
-          tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
-          tagData += String(readers[i].nuid[j], HEX);
+          // Publish the UID data to the MQTT reporter topic
+          String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+          String tagData = "";
+          for (byte j = 0; j < 5; j++) {  // Only include the 5-byte tag data, exclude the checksum
+            tagData += String(readers[i].nuid[j] < 0x10 ? "0" : "");
+            tagData += String(readers[i].nuid[j], HEX);
+          }
+          mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
+
+          // Publish an "ACTIVE" status to the MQTT sensor topic
+          String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
+          mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
         }
-        mqttClient.publish(reporterTopic.c_str(), tagData.c_str());
+           #endif
+    } else {
+      // If no card is read and the reader was previously in "card read" state
+      if (readers[i].cardRead) {
+        // Output the reader ID and an "empty" UID to Serial and Ethernet client
+        // (the following sections handle both Serial and Ethernet client output)
 
-      // Publish an "ACTIVE" status to the MQTT sensor topic
-      String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-      mqttClient.publish(sensorTopic.c_str(), "ACTIVE");
-    }
+        // Output the reader ID
+        Serial.print(readers[i].id);
 
-  } else {
-    // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
-    if (readers[i].cardRead) {
-      if (isEthernetConnected) {
-        // Publish an "INACTIVE" status to the MQTT sensor topic
-        String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
-        mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
+        // Output an "empty" UID
+        for (byte j = 0; j < 5; j++) {
+          Serial.print("00");
+        }
 
-        // Publish a "no payload" message to the MQTT reporter topic
-        String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
-        mqttClient.publish(reporterTopic.c_str(), "");
+        // Output an "empty" checksum
+        Serial.print("00");
+
+        // Output line endings and a '>' symbol (MERG Concentrator format)
+        Serial.write(0x0D);  // CR
+        Serial.write(0x0A);  // LF
+        Serial.write('>');   // ETX replaced by '>'
+
+        #ifdef USE_MQTT
+          // If Ethernet is connected
+          if (isEthernetConnected) {
+            // Reconnect to the MQTT broker if necessary
+            if (!mqttClient.connected()) {
+              mqtt_reconnect();
+            }
+            
+            // Publish an "empty" UID to the MQTT reporter topic
+            String reporterTopic = REPORTER_BASE_TOPIC + String(readers[i].id) + "/";
+            mqttClient.publish(reporterTopic.c_str(), "");
+
+            // Publish an "INACTIVE" status to the MQTT sensor topic
+            String sensorTopic = SENSOR_BASE_TOPIC + String(readers[i].id) + "/";
+            mqttClient.publish(sensorTopic.c_str(), "INACTIVE");
+          }
+        #endif
+
+        // Reset the reader's "card read" state and UID
+        readers[i].cardRead = false;
+        memset(readers[i].nuid, 0, sizeof(readers[i].nuid));
       }
-    }
-    // Mark the card as not read
-    readers[i].cardRead = false;
     }
   }
 }
