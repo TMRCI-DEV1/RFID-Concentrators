@@ -1,23 +1,32 @@
 /*
   Project: Arduino-based MFRC522 RFID Concentrator
   Author: Thomas Seitz (thomas.seitz@tmrci.org)
-  Version: 1.0.7
-  Date: 2023-05-16
+  Version: 1.0.8
+  Date: 2023-05-17
   Description: A sketch for an Arduino-based RFID concentrator that supports up to 8 RFID readers, sends the data to an MQTT broker,
   and outputs data to Serial clients. Uses DHCP for obtaining Arduino's IP address.
 */
 
-// Include required libraries
-#include <SPI.h>           // SPI library for communicating with the MFRC522 reader
-#include <MFRC522.h>       // MFRC522 library for reading RFID cards
-#include <Ethernet.h>      // Ethernet library for the Ethernet shield
-#include <PubSubClient.h>  // PubSub Client library for the MQTT connection  
+// Define if you want to use MQTT
+// #define USE_MQTT
 
-// Define MAC address, IP address, and MQTT server
+// Include required libraries
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Ethernet.h>
+#ifdef USE_MQTT
+  #include <PubSubClient.h>
+#endif
+
 byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
-IPAddress mqttServer(192, 168, 1, 200);
-const char* mqttSensorTopicBase = "TMRCI/dt/sensor/RFID_sensor/"; // Replace with the the appropriate JMRI Sensor topic
-const char* mqttReporterTopicBase = "TMRCI/dt/reporter/RFID/";    // Replace with the appropriate JMRI Reporter topic
+IPAddress mqttServer(192, 168, 1, 11);
+const char* mqttSensorTopicBase = "TMRCI/dt/sensor/RFID_sensor/";
+const char* mqttReporterTopicBase = "TMRCI/dt/reporter/RFID/";
+
+EthernetClient ethClient; // MQTT client
+#ifdef USE_MQTT
+  PubSubClient mqttClient(ethClient);
+#endif
 
 // Define SS and RST pins, and reader assignments based on Arduino board type
 #if defined(ARDUINO_AVR_UNO) || defined(ARDUINO_AVR_NANO)
@@ -53,11 +62,6 @@ struct RFIDReader {
 // Create an array of RFIDReader structs
 RFIDReader readers[numReaders];
 
-// Ethernet client objects
-EthernetClient ethClient; // MQTT client
-EthernetClient client;    // Ethernet client
-PubSubClient mqttClient(ethClient);
-
 // Declare a variable to track the Ethernet connection status
 bool isEthernetConnected = false;
 
@@ -71,8 +75,13 @@ void setup() {
   Ethernet.begin(mac);
   delay(1000);
 
+#ifdef USE_MQTT
   // Set the MQTT server
   mqttClient.setServer(mqttServer, 1883); // Replace 1883 with your MQTT broker's port if different
+  if (!mqttClient.connected()) {
+    reconnect();
+  }
+#endif
 
   // Configure pin 10 for the Ethernet shield
   pinMode(10, OUTPUT);
@@ -87,20 +96,6 @@ void setup() {
   pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
 
-  // Start Ethernet connection with the given MAC address
-  if (Ethernet.begin(mac) == 1) {
-    isEthernetConnected = true;
-    delay(1000);
-  } else {
-    // Ethernet shield not connected or network not available
-    isEthernetConnected = false;
-  }
-
-  // If Ethernet is connected, start the server and set the MQTT server
-  if (isEthernetConnected) {
-    mqttClient.setServer(mqttServer, 1883); // Replace 1883 with your MQTT broker's port if different
-  }
-
   // Initialize RFID readers
   for (uint8_t i = 0; i < numReaders; i++) {
     readers[i].id = readerID[i];
@@ -113,12 +108,6 @@ void setup() {
     // Check if the reader is connected
     if (readers[i].mfrc522.PCD_PerformSelfTest()) {
       readers[i].isConnected = true;
-
-      // Print debugging information (commented out)
-      // Serial.print("Reader ");
-      // Serial.print(readers[i].id);
-      // Serial.print(" detected on SS pin ");
-      // Serial.println(readers[i].ssPin);
     } else {
       readers[i].isConnected = false;
     }
@@ -137,8 +126,7 @@ void setup() {
 }
 
 // MQTT reconnect function - attempts to reconnect to the MQTT broker
-unsigned long lastAttemptTime = 0;
-
+#ifdef USE_MQTT
 void reconnect() {
   // Continue trying to reconnect until connected
   while (!mqttClient.connected()) {
@@ -158,10 +146,8 @@ void reconnect() {
       } else {
         // If 5 seconds haven't passed yet, return and do other tasks
         return;
-      }
-    }
-  }
 }
+#endif
 
 // Function to send output to Serial only
 void sendOutputToSerial(RFIDReader &reader) {
@@ -217,16 +203,18 @@ void loop() {
   Ethernet.maintain();
 
   // Reconnect to MQTT broker if not connected
+#ifdef USE_MQTT
   if (!mqttClient.connected()) {
     reconnect();
   }
   mqttClient.loop(); // Keep MQTT client connected and process incoming messages
+#endif
 
   // Check for new cards and read card UIDs
   for (uint8_t i = 0; i < numReaders; i++) {
     if (readers[i].mfrc522.PICC_IsNewCardPresent() && readers[i].mfrc522.PICC_ReadCardSerial()) {
       readers[i].tagPresent = true;
-  
+
       // Update the 'nuid' field with the card's UID
       for (uint8_t j = 0; j < readers[i].mfrc522.uid.size; j++) {
         readers[i].nuid[j] = readers[i].mfrc522.uid.uidByte[j];
@@ -237,16 +225,16 @@ void loop() {
       String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
       String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
 
-      // Always send output to Serial and Ethernet connections
-      sendOutputToSerial(readers[i]);
+       // Always send output to Serial and Ethernet connections
+  sendOutputToSerial(readers[i]);
 
-      // Send data via MQTT if Ethernet is connected
-      if (isEthernetConnected) {
-        mqttClient.connect("RFID_reader");
-        mqttClient.publish(topicSensor.c_str(), "ACTIVE");
-        mqttClient.publish(topicReporter.c_str(), rfidData.c_str());
-        mqttClient.disconnect();
-      }
+#ifdef USE_MQTT
+  // Send data via MQTT if Ethernet is connected
+  if (isEthernetConnected) {
+    mqttClient.publish(topicSensor.c_str(), "ACTIVE");
+    mqttClient.publish(topicReporter.c_str(), rfidData.c_str());
+  }
+#endif
 
       // Halt card processing and stop encryption
       readers[i].mfrc522.PICC_HaltA();
@@ -257,12 +245,13 @@ void loop() {
       // If a tag is no longer detected, set the sensor to INACTIVE and clear the reporter
       String topicSensor = String(mqttSensorTopicBase) + String(readers[i].id) + "/";
       String topicReporter = String(mqttReporterTopicBase) + String(readers[i].id) + "/";
+
+#ifdef USE_MQTT
       if (isEthernetConnected) {
-        mqttClient.connect("RFID_reader");
         mqttClient.publish(topicSensor.c_str(), "INACTIVE");
         mqttClient.publish(topicReporter.c_str(), ""); // Clear the reporter by sending an empty payload
-        mqttClient.disconnect();
       }
+#endif
     }
   }
 }
