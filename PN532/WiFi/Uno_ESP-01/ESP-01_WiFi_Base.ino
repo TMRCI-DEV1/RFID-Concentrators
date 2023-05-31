@@ -1,4 +1,4 @@
-//ESP-01 WiFi Sketch for use with Arduino Uno WiFi
+//WiFi Sketch for use with Arduino Uno/Mega WiFi
  
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
